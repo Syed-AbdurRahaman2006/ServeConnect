@@ -76,7 +76,6 @@ const userSchema = new mongoose.Schema(
 
 // 2dsphere index for geo-spatial queries on user location
 userSchema.index({ location: '2dsphere' });
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1, status: 1 });
 
 /**

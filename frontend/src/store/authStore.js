@@ -58,6 +58,18 @@ const useAuthStore = create((set, get) => ({
     set({ user });
   },
 
+  updateLocation: async (coordinates) => {
+    try {
+      const res = await authAPI.updateLocation(coordinates);
+      if (res && res.data && res.data.user) {
+        get().updateUser({ location: res.data.user.location });
+      }
+      return res;
+    } catch (err) {
+      throw err;
+    }
+  },
+
   clearError: () => set({ error: null }),
 
   // Initialize socket connection on app load if token exists

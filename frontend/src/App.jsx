@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 import Navbar from './components/Navbar';
@@ -14,7 +14,11 @@ import ProviderDashboard from './pages/ProviderDashboard';
 import AdminPanel from './pages/AdminPanel';
 
 const App = () => {
-  const { initSocket, isAuthenticated } = useAuthStore();
+  const { initSocket, isAuthenticated, user } = useAuthStore();
+  const location = useLocation();
+
+  // Hide Top Navbar for dashboard-driven layouts
+  const hideNavbar = location.pathname.startsWith('/provider') || location.pathname.startsWith('/admin');
 
   // Initialize WebSocket connection on app load if user is authenticated
   useEffect(() => {
@@ -23,8 +27,15 @@ const App = () => {
     }
   }, [isAuthenticated]);
 
+  // Helper to get the dashboard path for the current user
+  const getDashboardPath = () => {
+    if (user?.role === 'ADMIN') return '/admin';
+    if (user?.role === 'PROVIDER') return '/provider/dashboard';
+    return '/dashboard';
+  };
+
   return (
-    <div className="min-h-screen bg-dark-950">
+    <div className="min-h-screen bg-surface-50">
       <Toaster
         position="top-right"
         toastOptions={{
@@ -36,10 +47,10 @@ const App = () => {
           },
         }}
       />
-      <Navbar />
+      {!hideNavbar && <Navbar />}
       <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<HomePage />} />
+        {/* Public Routes — redirect logged-in users to dashboard */}
+        <Route path="/" element={isAuthenticated ? <Navigate to={getDashboardPath()} replace /> : <HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/services/:id" element={<ServiceDetailsPage />} />

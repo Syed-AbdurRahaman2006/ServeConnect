@@ -14,4 +14,5 @@ module.exports = {
     password: process.env.REDIS_PASSWORD || undefined,
   },
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
 };

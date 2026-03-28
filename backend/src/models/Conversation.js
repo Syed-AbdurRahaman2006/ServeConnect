@@ -11,7 +11,6 @@ const conversationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Request',
       required: true,
-      index: true,
     },
     participants: [
       {

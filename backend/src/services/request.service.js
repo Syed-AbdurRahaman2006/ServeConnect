@@ -36,10 +36,48 @@ class RequestService {
     });
 
     // Find nearby providers for broadcasting (within 10km)
-    const nearbyProviders = await userRepository.findNearbyProviders(
-      location.coordinates,
-      data.maxDistance || 10000
-    );
+    let nearbyProviders = [];
+    const hasValidLocation = location && location.coordinates &&
+      !(location.coordinates[0] === 0 && location.coordinates[1] === 0);
+
+    if (hasValidLocation) {
+      try {
+        nearbyProviders = await userRepository.findNearbyProviders(
+          location.coordinates,
+          data.maxDistance || 10000
+        );
+      } catch (err) {
+        // Geo-query can fail if no 2dsphere index or invalid coords
+        console.warn('Geo-query failed, falling back to category-based broadcast:', err.message);
+      }
+    }
+
+    // Fallback: if geo-query found no providers, broadcast to the service owner
+    // and all active providers who offer the same category
+    if (nearbyProviders.length === 0) {
+      const User = require('../models/User');
+      const Service = require('../models/Service');
+
+      // Find all providers who have active services in the same category
+      const categoryServices = await Service.find({
+        category: service.category,
+        availability: true,
+      }).select('providerId');
+
+      const providerIds = [...new Set([
+        service.providerId.toString(),
+        ...categoryServices.map(s => s.providerId.toString()),
+      ])];
+
+      // Exclude the requester themselves
+      const filteredIds = providerIds.filter(id => id !== requesterId.toString());
+
+      nearbyProviders = await User.find({
+        _id: { $in: filteredIds },
+        role: 'PROVIDER',
+        status: 'active',
+      });
+    }
 
     // Store broadcast list on request
     if (nearbyProviders.length > 0) {
@@ -114,10 +152,24 @@ class RequestService {
    */
   async getBroadcastedRequests(providerId) {
     const Request = require('../models/Request');
+    const Service = require('../models/Service');
+
+    // Find all service IDs owned by this provider
+    const myServices = await Service.find({ providerId }).select('_id');
+    const myServiceIds = myServices.map(s => s._id);
+
+    // Return requests that are either:
+    // 1. Explicitly broadcasted to this provider, OR
+    // 2. For a service this provider owns (direct match)
+    // Both must be in CREATED state with no provider assigned yet
     return Request.find({
-      broadcastedTo: providerId,
       status: 'CREATED',
       providerId: null,
+      requesterId: { $ne: providerId }, // Don't show your own requests
+      $or: [
+        { broadcastedTo: providerId },
+        { serviceId: { $in: myServiceIds } },
+      ],
     })
       .populate('serviceId', 'title category price')
       .populate('requesterId', 'name email avatar')

@@ -1,5 +1,6 @@
 const serviceRepository = require('../repositories/service.repository');
 const { AppError } = require('../middlewares/error.middleware');
+const { getDistanceMatrix } = require('../utils/googleMaps');
 
 /**
  * Service Management Service — Business logic for provider services
@@ -32,7 +33,29 @@ class ServiceService {
    * Search services with filters
    */
   async search(filters, options) {
-    return serviceRepository.search(filters, options);
+    const result = await serviceRepository.search(filters, options);
+
+    // If coordinates were provided, attempt Google Maps exact distance calculation
+    if (filters.longitude && filters.latitude && result.services.length > 0) {
+      const origin = [Number(filters.longitude), Number(filters.latitude)];
+      const destinations = result.services.map((s) => s.location?.coordinates || [0, 0]);
+
+      const elements = await getDistanceMatrix(origin, destinations);
+
+      if (elements) {
+        result.services = result.services.map((s, idx) => {
+          const serviceObj = typeof s.toObject === 'function' ? s.toObject() : s;
+          const route = elements[idx];
+          if (route && route.status === 'OK') {
+            serviceObj.drivingDistance = route.distance;
+            serviceObj.drivingDuration = route.duration;
+          }
+          return serviceObj;
+        });
+      }
+    }
+
+    return result;
   }
 
   /**

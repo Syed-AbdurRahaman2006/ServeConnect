@@ -1,258 +1,94 @@
-// Mock LocalStorage Database Helper
-const getMockDB = () => {
-  const defaultDB = {
-    users: [],
-    services: [
-      { _id: 's1', title: 'Plumbing Repair', description: 'Fixing pipes', category: 'Plumbing', price: 50, priceUnit: 'per_hour', availability: true, provider: { _id: 'p1', name: 'Bob Provider', email: 'bob@provider.com' } },
-      { _id: 's2', title: 'House Cleaning', description: 'Deep cleaning', category: 'Cleaning', price: 100, priceUnit: 'fixed', availability: true, provider: { _id: 'p2', name: 'Alice Cleaning', email: 'alice@cleaning.com' } }
-    ],
-    requests: [],
-    conversations: [],
-    messages: []
-  };
-  const stored = localStorage.getItem('serveconnect_mock_db');
-  return stored ? JSON.parse(stored) : defaultDB;
-};
+import axios from 'axios';
 
-const saveMockDB = (db) => {
-  localStorage.setItem('serveconnect_mock_db', JSON.stringify(db));
-};
+// Create Axios Instance
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+});
 
-const getCurrentUser = () => {
-  const userStr = localStorage.getItem('user');
-  return userStr ? JSON.parse(userStr) : null;
-};
+// Request Interceptor: Add Auth Token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
 
-// Simulate network delay
-const delay = (ms = 400) => new Promise(resolve => setTimeout(resolve, ms));
+// Response Interceptor: Handle 401 Unauthorized globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      // Dispatch custom event if needed, or safely trigger redirect
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
-const mockResponse = async (data) => {
-  await delay();
-  return { data };
-};
-
-const mockError = async (message) => {
-  await delay();
-  throw { message };
+// Response helper to match Zustand store expectations
+// The backend returns: { success: true, data: { ... } }
+// Stores expect: const res = await apiCall(); const { items } = res.data;
+const wrapResponse = async (promise) => {
+  try {
+    const response = await promise;
+    // We return { data: response.data.data } so that res.data in store yields the inner object
+    return { data: response.data.data || response.data };
+  } catch (error) {
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.message || 'API Error');
+    }
+    throw error;
+  }
 };
 
 // ─── Auth APIs ──────────────────────────────────────────────────
 export const authAPI = {
-  signup: async (data) => {
-    const db = getMockDB();
-    if (db.users.find(u => u.email === data.email)) return mockError('Email already exists');
-    const newUser = { _id: Date.now().toString(), ...data, status: 'active', createdAt: new Date() };
-    db.users.push(newUser);
-    saveMockDB(db);
-    return mockResponse({ user: newUser, token: 'mock-jwt-token-xyz' });
-  },
-  login: async (data) => {
-    const db = getMockDB();
-    const user = db.users.find(u => u.email === data.email && u.password === data.password);
-    if (!user) {
-      if (data.email.includes('admin')) {
-         const admin = { _id: 'admin1', name: 'Admin', email: data.email, role: 'ADMIN', status: 'active' };
-         return mockResponse({ user: admin, token: 'mock-token' });
-      }
-      if (data.email.includes('provider')) {
-         const provider = { _id: 'p-mock', name: 'Provider', email: data.email, role: 'PROVIDER', status: 'active' };
-         return mockResponse({ user: provider, token: 'mock-token' });
-      }
-      return mockError('Invalid credentials (try admin@ or provider@)');
-    }
-    if (user.status !== 'active') return mockError('Account banned');
-    return mockResponse({ user, token: 'mock-jwt-token-xyz' });
-  },
-  getProfile: async () => mockResponse({ user: getCurrentUser() }),
-  updateLocation: async (coordinates) => mockResponse({ message: 'Location updated' }),
+  signup: (data) => wrapResponse(api.post('/auth/signup', data)),
+  login: (data) => wrapResponse(api.post('/auth/login', data)),
+  getProfile: () => wrapResponse(api.get('/auth/profile')),
+  updateLocation: (coordinates) => wrapResponse(api.put('/auth/location', { coordinates })),
 };
 
 // ─── Service APIs ───────────────────────────────────────────────
 export const serviceAPI = {
-  getAll: async (params = {}) => {
-    const db = getMockDB();
-    let res = [...db.services];
-    if (params.search) res = res.filter(s => s.title.toLowerCase().includes(params.search.toLowerCase()));
-    if (params.category && params.category !== 'All') res = res.filter(s => s.category === params.category);
-    return mockResponse({ services: res, page: 1, pages: 1, total: res.length });
-  },
-  getById: async (id) => {
-    const db = getMockDB();
-    const s = db.services.find(s => s._id === id);
-    return s ? mockResponse({ service: s }) : mockError('Not found');
-  },
-  create: async (data) => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    const newService = { _id: Date.now().toString(), ...data, availability: true, provider: user };
-    db.services.unshift(newService);
-    saveMockDB(db);
-    return mockResponse({ service: newService });
-  },
-  update: async (id, data) => mockResponse({ service: data }),
-  delete: async (id) => {
-    const db = getMockDB();
-    db.services = db.services.filter(s => s._id !== id);
-    saveMockDB(db);
-    return mockResponse({ message: 'Deleted' });
-  },
-  toggleAvailability: async (id) => {
-    const db = getMockDB();
-    const svc = db.services.find(s => s._id === id);
-    if(svc) svc.availability = !svc.availability;
-    saveMockDB(db);
-    return mockResponse({ service: svc });
-  },
-  getMyServices: async () => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    const my = db.services.filter(s => s.provider && s.provider._id === user?._id);
-    return mockResponse({ services: my });
-  },
+  getAll: (params = {}) => wrapResponse(api.get('/services', { params })),
+  getById: (id) => wrapResponse(api.get(`/services/${id}`)),
+  create: (data) => wrapResponse(api.post('/services', data)),
+  update: (id, data) => wrapResponse(api.put(`/services/${id}`, data)),
+  delete: (id) => wrapResponse(api.delete(`/services/${id}`)),
+  toggleAvailability: (id) => wrapResponse(api.patch(`/services/${id}/availability`)),
+  getMyServices: () => wrapResponse(api.get('/services/provider/me')),
 };
 
 // ─── Request APIs ───────────────────────────────────────────────
 export const requestAPI = {
-  create: async (data) => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    const svc = db.services.find(s => s._id === data.serviceId);
-    const newReq = { 
-      _id: Date.now().toString(), 
-      serviceId: svc, 
-      requesterId: user, 
-      description: data.description, 
-      status: 'CREATED', 
-      createdAt: new Date() 
-    };
-    db.requests.unshift(newReq);
-    saveMockDB(db);
-    
-    // Simulate socket broadcast to providers
-    import('./socket').then(({ socketService }) => {
-      socketService.triggerServerEvent('request:created', { request: newReq });
-    });
-
-    return mockResponse({ request: newReq, broadcastCount: 1 });
-  },
-  getAll: async () => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    let res = [];
-    if (user?.role === 'USER') {
-      res = db.requests.filter(r => r.requesterId?._id === user?._id);
-    } else {
-      res = db.requests.filter(r => r.providerId?._id === user?._id);
-    }
-    return mockResponse({ requests: res, page: 1, pages: 1, total: res.length });
-  },
-  getById: async (id) => {
-    const db = getMockDB();
-    const r = db.requests.find(r => r._id === id);
-    return r ? mockResponse({ request: r }) : mockError('Not found');
-  },
-  accept: async (id) => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    const req = db.requests.find(r => r._id === id);
-    if (req) {
-      req.status = 'ACCEPTED';
-      req.providerId = user;
-      saveMockDB(db);
-      
-      // Simulate socket
-      import('./socket').then(({ socketService }) => {
-        socketService.triggerServerEvent('request:accepted', { request: req });
-      });
-      return mockResponse({ request: req });
-    }
-    return mockError('Failed');
-  },
-  updateStatus: async (id, status, note) => {
-    const db = getMockDB();
-    const req = db.requests.find(r => r._id === id);
-    if (req) {
-      req.status = status;
-      saveMockDB(db);
-      return mockResponse({ request: req });
-    }
-    return mockError('Failed');
-  },
-  getBroadcasted: async () => {
-    const db = getMockDB();
-    const res = db.requests.filter(r => r.status === 'CREATED');
-    return mockResponse({ requests: res });
-  },
+  create: (data) => wrapResponse(api.post('/requests', data)),
+  getAll: () => wrapResponse(api.get('/requests')),
+  getById: (id) => wrapResponse(api.get(`/requests/${id}`)),
+  accept: (id) => wrapResponse(api.put(`/requests/${id}/accept`)),
+  updateStatus: (id, status, note) => wrapResponse(api.put(`/requests/${id}/status`, { status, resolutionNote: note })),
+  getBroadcasted: () => wrapResponse(api.get('/requests/broadcasted')),
 };
 
 // ─── Chat APIs ──────────────────────────────────────────────────
 export const chatAPI = {
-  getConversations: async () => {
-    const db = getMockDB();
-    return mockResponse({ conversations: db.conversations });
-  },
-  getConversation: async (requestId) => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    let conv = db.conversations.find(c => c.requestId === requestId);
-    if (!conv) {
-      conv = { _id: 'conv-' + requestId, requestId, participants: [{ _id: 'other', name: 'Other Coordinator' }, user] };
-      db.conversations.push(conv);
-      saveMockDB(db);
-    }
-    return mockResponse({ conversation: conv });
-  },
-  getMessages: async (conversationId) => {
-    const db = getMockDB();
-    const msgs = db.messages.filter(m => m.conversationId === conversationId);
-    return mockResponse({ messages: msgs });
-  },
-  sendMessage: async (data) => {
-    const db = getMockDB();
-    const user = getCurrentUser();
-    const msg = { 
-      _id: Date.now().toString(), 
-      conversationId: data.conversationId, 
-      senderId: user, 
-      content: data.content, 
-      createdAt: new Date(),
-      deliveredAt: new Date()
-    };
-    db.messages.push(msg);
-    saveMockDB(db);
-    return mockResponse({ message: msg });
-  },
-  markAsSeen: async (conversationId) => mockResponse({ message: 'Seen' }),
+  getConversations: () => wrapResponse(api.get('/chat/conversations')),
+  getConversation: (requestId) => wrapResponse(api.get(`/chat/request/${requestId}`)),
+  getMessages: (conversationId) => wrapResponse(api.get(`/chat/${conversationId}/messages`)),
+  sendMessage: (data) => wrapResponse(api.post('/chat/messages', data)),
+  markAsSeen: (conversationId) => wrapResponse(api.put(`/chat/${conversationId}/seen`)),
 };
 
 // ─── Admin APIs ─────────────────────────────────────────────────
 export const adminAPI = {
-  getUsers: async () => {
-    const db = getMockDB();
-    return mockResponse({ users: db.users, page: 1, pages: 1 });
-  },
-  toggleBlock: async (id) => {
-    const db = getMockDB();
-    const u = db.users.find(u => u._id === id);
-    if(u) u.status = u.status === 'active' ? 'blocked' : 'active';
-    saveMockDB(db);
-    return mockResponse({ message: 'User updated successfully' });
-  },
-  getStats: async () => {
-    const db = getMockDB();
-    const reqs = db.requests;
-    const stats = {
-      users: db.users.filter(u => u.role === 'USER').length,
-      providers: db.users.filter(u => u.role === 'PROVIDER').length,
-      services: db.services.length,
-      requests: {
-        CREATED: reqs.filter(r => r.status === 'CREATED').length,
-        ACCEPTED: reqs.filter(r => r.status === 'ACCEPTED').length,
-        COMPLETED: reqs.filter(r => r.status === 'COMPLETED').length,
-      }
-    };
-    return mockResponse({ stats });
-  },
+  getUsers: () => wrapResponse(api.get('/admin/users')),
+  toggleBlock: (id) => wrapResponse(api.put(`/admin/users/${id}/block`)),
+  getStats: () => wrapResponse(api.get('/admin/stats')),
 };
 
-export default {};
+export default api;

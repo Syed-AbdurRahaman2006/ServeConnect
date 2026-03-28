@@ -37,6 +37,7 @@ const startServer = async () => {
       const { createAdapter } = require('@socket.io/redis-adapter');
       const pubClient = createRedisClient();
       const subClient = pubClient.duplicate();
+      subClient.on('error', (err) => console.error('❌ Redis error (sub):', err.message));
 
       await Promise.all([pubClient.connect(), subClient.connect()]);
       io.adapter(createAdapter(pubClient, subClient));

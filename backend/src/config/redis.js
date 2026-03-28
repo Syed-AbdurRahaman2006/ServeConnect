@@ -10,6 +10,7 @@ const createRedisClient = () => {
     host: redisConfig.host,
     port: redisConfig.port,
     password: redisConfig.password,
+    tls: redisConfig.host.includes('upstash.io') ? {} : undefined,
     retryStrategy: (times) => {
       const delay = Math.min(times * 50, 2000);
       return delay;
