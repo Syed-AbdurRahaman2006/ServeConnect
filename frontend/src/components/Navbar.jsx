@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import {
   Menu, X, Home, Search, MessageSquare, LayoutDashboard,
-  Shield, LogOut, User, Zap, MapPin, ShoppingCart
+  LogOut, User, Zap, MapPin, ClipboardList
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -32,21 +32,17 @@ const Navbar = () => {
 
   const roleLinks = {
     USER: [
-      { to: '/chat', label: 'Messages', icon: MessageSquare },
-      { to: '/dashboard', label: 'Profile', icon: User },
+      { to: '/dashboard', label: 'Home', icon: Home },
+      { to: '/dashboard#bookings', label: 'My Bookings', icon: ClipboardList },
+      { to: '/profile', label: 'Profile', icon: User },
     ],
     PROVIDER: [
       { to: '/provider/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: '/chat', label: 'Messages', icon: MessageSquare },
     ],
-    ADMIN: [
-      { to: '/', label: 'Home', icon: Home },
-      { to: '/admin', label: 'Admin Panel', icon: Shield },
-    ],
   };
 
   const unauthLinks = [
-    { to: '/', label: 'Home', icon: Home },
     { to: '/#services', label: 'Services', icon: Search },
     { to: '/#how-it-works', label: 'How It Works', icon: Zap },
     { to: '/#contact', label: 'Contact', icon: MessageSquare },
@@ -61,7 +57,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
-          <Link to={isAuthenticated ? (user?.role === 'PROVIDER' ? '/provider/dashboard' : user?.role === 'ADMIN' ? '/admin' : '/dashboard') : '/'} className="flex items-center space-x-2 group">
+          <Link to={isAuthenticated ? (user?.role === 'PROVIDER' ? '/provider/dashboard' : '/dashboard') : '/'} className="flex items-center space-x-2 group">
             <div className="w-9 h-9 bg-gradient-to-br from-primary-600 to-secondary-500 rounded-xl flex items-center justify-center shadow-md shadow-primary-500/20 group-hover:shadow-primary-500/40 transition-shadow">
               <span className="text-white font-bold text-lg">S</span>
             </div>
@@ -122,13 +118,6 @@ const Navbar = () => {
           <div className="hidden md:flex items-center space-x-4 ml-4 pl-4 border-l border-surface-200">
             {isAuthenticated ? (
               <>
-                {user?.role === 'USER' && (
-                   <button className="text-surface-500 hover:text-primary-600 transition-colors relative">
-                     <ShoppingCart size={22} />
-                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">0</span>
-                   </button>
-                )}
-                
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); }}

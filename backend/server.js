@@ -66,6 +66,16 @@ const startServer = async () => {
     // Graceful shutdown
     const shutdown = async () => {
       console.log('\n🛑 Shutting down gracefully...');
+      try {
+        const mongoose = require('mongoose');
+        if (mongoose.connection.readyState === 1) {
+          await mongoose.connection.close();
+          console.log('   MongoDB connection closed');
+        }
+      } catch (err) {
+        console.error('   Error closing MongoDB connection:', err);
+      }
+      
       server.close(() => {
         console.log('   HTTP server closed');
         process.exit(0);
@@ -74,6 +84,11 @@ const startServer = async () => {
 
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
+    
+    // For nodemon restarts
+    process.on('SIGUSR2', async () => {
+      await shutdown();
+    });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

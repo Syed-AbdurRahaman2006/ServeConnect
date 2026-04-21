@@ -63,6 +63,9 @@ export default {
         'pulse-soft': 'pulseSoft 3s ease-in-out infinite',
         'float': 'float 6s ease-in-out infinite',
         'float-delayed': 'float 6s ease-in-out infinite 2s',
+        'hero-orb-1': 'heroOrb1 20s ease-in-out infinite',
+        'hero-orb-2': 'heroOrb2 25s ease-in-out infinite',
+        'hero-orb-3': 'heroOrb3 18s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -80,6 +83,20 @@ export default {
         float: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-20px)' },
+        },
+        heroOrb1: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '33%': { transform: 'translate(-30px, 40px) scale(1.05)' },
+          '66%': { transform: 'translate(20px, -20px) scale(0.95)' },
+        },
+        heroOrb2: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '33%': { transform: 'translate(40px, -30px) scale(1.08)' },
+          '66%': { transform: 'translate(-20px, 20px) scale(0.92)' },
+        },
+        heroOrb3: {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)', opacity: '0.3' },
+          '50%': { transform: 'translate(-25px, 30px) scale(1.1)', opacity: '0.5' },
         },
       },
       boxShadow: {

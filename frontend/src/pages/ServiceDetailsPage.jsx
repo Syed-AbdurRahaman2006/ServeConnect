@@ -59,6 +59,22 @@ const ServiceDetailsPage = () => {
         <span className="font-semibold">Back</span>
       </button>
 
+      {/* Service Image Banner */}
+      {service.imageUrl && (
+        <div className="rounded-3xl overflow-hidden mb-6 relative h-64 md:h-80 bg-surface-200">
+          <img 
+            src={service.imageUrl} 
+            alt={service.title} 
+            className="w-full h-full object-cover"
+            onError={(e) => { e.target.parentElement.style.display = 'none'; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+          <div className="absolute bottom-6 left-6">
+            <span className="bg-white/95 backdrop-blur-sm px-4 py-2 rounded-xl text-sm font-bold text-surface-900 shadow-md">{service.category}</span>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">

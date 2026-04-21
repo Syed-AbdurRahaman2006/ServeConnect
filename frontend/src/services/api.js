@@ -71,7 +71,12 @@ export const requestAPI = {
   getAll: () => wrapResponse(api.get('/requests')),
   getById: (id) => wrapResponse(api.get(`/requests/${id}`)),
   accept: (id) => wrapResponse(api.put(`/requests/${id}/accept`)),
-  updateStatus: (id, status, note) => wrapResponse(api.put(`/requests/${id}/status`, { status, resolutionNote: note })),
+  updateStatus: (id, status, note, metadata = {}) => {
+    const payload = { status, resolutionNote: note };
+    if (metadata.rating) payload.rating = metadata.rating;
+    if (metadata.feedback) payload.feedback = metadata.feedback;
+    return wrapResponse(api.put(`/requests/${id}/status`, payload));
+  },
   getBroadcasted: () => wrapResponse(api.get('/requests/broadcasted')),
 };
 
@@ -82,13 +87,6 @@ export const chatAPI = {
   getMessages: (conversationId) => wrapResponse(api.get(`/chat/${conversationId}/messages`)),
   sendMessage: (data) => wrapResponse(api.post('/chat/messages', data)),
   markAsSeen: (conversationId) => wrapResponse(api.put(`/chat/${conversationId}/seen`)),
-};
-
-// ─── Admin APIs ─────────────────────────────────────────────────
-export const adminAPI = {
-  getUsers: () => wrapResponse(api.get('/admin/users')),
-  toggleBlock: (id) => wrapResponse(api.put(`/admin/users/${id}/block`)),
-  getStats: () => wrapResponse(api.get('/admin/stats')),
 };
 
 export default api;

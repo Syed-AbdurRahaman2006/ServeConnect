@@ -99,6 +99,23 @@ const requestSchema = new mongoose.Schema(
     scheduledDate: {
       type: Date,
     },
+    // Completion confirmation tracking
+    completionConfirmation: {
+      userConfirmed: { type: Boolean, default: false },
+      providerConfirmed: { type: Boolean, default: false },
+      userConfirmedAt: { type: Date },
+      providerConfirmedAt: { type: Date },
+    },
+    // Rating and feedback (from user)
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+    },
+    feedback: {
+      type: String,
+      maxlength: 1000,
+    },
   },
   {
     timestamps: true,

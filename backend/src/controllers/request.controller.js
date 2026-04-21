@@ -63,12 +63,19 @@ const acceptRequest = asyncHandler(async (req, res) => {
 });
 
 const updateRequestStatus = asyncHandler(async (req, res) => {
-  const { status, note } = req.body;
+  const { status, note, rating, feedback } = req.body;
+  
+  // Prepare metadata for completion confirmation
+  const metadata = {};
+  if (rating) metadata.rating = rating;
+  if (feedback) metadata.feedback = feedback;
+  
   const request = await requestService.updateStatus(
     req.params.id,
     status,
     req.user._id,
-    note
+    note,
+    metadata
   );
 
   // Notify relevant parties of status change
@@ -80,15 +87,35 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
         ? request.providerId._id || request.providerId
         : request.requesterId._id || request.requesterId;
 
+    // Determine the message based on completion confirmation status
+    let message = `Request status changed to ${status}`;
+    if (status === 'COMPLETED' && request.completionConfirmation) {
+      const bothConfirmed = 
+        request.completionConfirmation.userConfirmed && 
+        request.completionConfirmation.providerConfirmed;
+      
+      if (!bothConfirmed) {
+        // One party confirmed, waiting for the other
+        const isUserConfirming = req.user._id.toString() === (request.requesterId._id || request.requesterId).toString();
+        message = isUserConfirming 
+          ? 'User marked service as complete. Please confirm completion.'
+          : 'Provider marked service as complete. Please confirm completion.';
+      } else {
+        message = 'Service completed successfully!';
+      }
+    }
+
     io.to(`user:${recipientId}`).emit(SOCKET_EVENTS.REQUEST_UPDATED, {
       request,
-      message: `Request status changed to ${status}`,
+      message,
     });
   }
 
   res.status(200).json({
     success: true,
-    message: `Request status updated to ${status}`,
+    message: request.status === 'COMPLETED' 
+      ? 'Service marked as completed!' 
+      : `Request status updated to ${status}`,
     data: { request },
   });
 });

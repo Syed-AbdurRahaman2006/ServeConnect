@@ -51,7 +51,7 @@ class ServiceRepository {
 
     // Geo-spatial filter: find services within a radius
     if (filters.longitude && filters.latitude) {
-      const maxDistance = filters.maxDistance || 10000; // default 10km
+      const maxDistance = filters.maxDistance || 50000; // default 50km
       query.location = {
         $near: {
           $geometry: {
@@ -63,13 +63,36 @@ class ServiceRepository {
       };
     }
 
+    let sortQuery;
+    if (filters.longitude && filters.latitude) {
+      sortQuery = undefined; // $near sorts automatically by distance. Providing .sort() causes MongoServerError.
+    } else if (filters.search) {
+      sortQuery = { score: { $meta: 'textScore' } };
+    } else {
+      sortQuery = { createdAt: -1 };
+    }
+
+    let countQuery = { ...query };
+    if (countQuery.location && countQuery.location.$near) {
+      // $near is not allowed in countDocuments. Convert to $geoWithin for just the count.
+      const nearParams = countQuery.location.$near;
+      countQuery.location = {
+        $geoWithin: {
+          $centerSphere: [
+            nearParams.$geometry.coordinates,
+            nearParams.$maxDistance / 6378100 // Earth radius in meters is approx 6378.1 km = 6378100 m
+          ]
+        }
+      };
+    }
+
     const [services, total] = await Promise.all([
       Service.find(query)
         .populate('provider', 'name email avatar location')
         .skip(skip)
         .limit(limit)
-        .sort(filters.search ? { score: { $meta: 'textScore' } } : { createdAt: -1 }),
-      Service.countDocuments(query),
+        .sort(sortQuery),
+      Service.countDocuments(countQuery),
     ]);
 
     return { services, total, page, pages: Math.ceil(total / limit) };

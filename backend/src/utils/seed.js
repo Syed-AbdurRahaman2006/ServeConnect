@@ -5,7 +5,7 @@ const User = require('../models/User');
 const Service = require('../models/Service');
 
 /**
- * Seed script — Creates initial ADMIN user and sample data.
+ * Seed script — Creates sample data for development.
  * Run with: npm run seed
  */
 const seedDatabase = async () => {
@@ -13,21 +13,6 @@ const seedDatabase = async () => {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/serveconnect';
     await mongoose.connect(mongoUri);
     console.log('✅ Connected to MongoDB for seeding');
-
-    // Create ADMIN user
-    const adminExists = await User.findOne({ role: 'ADMIN' });
-    if (!adminExists) {
-      await User.create({
-        name: 'Admin',
-        email: 'admin@serveconnect.com',
-        password: 'admin123',
-        role: 'ADMIN',
-        location: { type: 'Point', coordinates: [77.5946, 12.9716] }, // Bangalore
-      });
-      console.log('✅ Admin user created: admin@serveconnect.com / admin123');
-    } else {
-      console.log('ℹ️  Admin user already exists');
-    }
 
     // Create sample provider
     const providerExists = await User.findOne({ email: 'provider@test.com' });

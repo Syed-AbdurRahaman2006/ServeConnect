@@ -48,8 +48,8 @@ const useRequestStore = create((set) => ({
     return res;
   },
 
-  updateStatus: async (id, status, note) => {
-    const res = await requestAPI.updateStatus(id, status, note);
+  updateStatus: async (id, status, note, metadata) => {
+    const res = await requestAPI.updateStatus(id, status, note, metadata);
     set((state) => ({
       requests: state.requests.map((r) =>
         r._id === id ? res.data.request : r
@@ -82,6 +82,15 @@ const useRequestStore = create((set) => ({
       broadcastedRequests: state.broadcastedRequests.filter(
         (r) => r._id !== requestId
       ),
+    }));
+  },
+
+  // Real-time update: update an existing user request automatically
+  updateRequestInStore: (updatedRequest) => {
+    set((state) => ({
+      requests: state.requests.some(r => r._id === updatedRequest._id) 
+        ? state.requests.map((r) => r._id === updatedRequest._id ? updatedRequest : r)
+        : [updatedRequest, ...state.requests] // Insert if new
     }));
   },
 }));

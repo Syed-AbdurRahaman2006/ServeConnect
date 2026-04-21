@@ -108,8 +108,9 @@ class RequestService {
 
   /**
    * Update request status with FSM validation.
+   * Handles completion confirmation and rating/feedback.
    */
-  async updateStatus(requestId, newStatus, actorId, note) {
+  async updateStatus(requestId, newStatus, actorId, note, metadata = {}) {
     const request = await requestRepository.findById(requestId);
     if (!request) {
       throw new AppError('Request not found', 404);
@@ -117,6 +118,58 @@ class RequestService {
 
     // Verify actor has permission for this transition
     this._validateActor(request, newStatus, actorId);
+
+    // Handle completion confirmation logic
+    if (newStatus === 'COMPLETED') {
+      const actorStr = actorId.toString();
+      const requesterId = request.requesterId._id
+        ? request.requesterId._id.toString()
+        : request.requesterId.toString();
+      const providerId = request.providerId
+        ? request.providerId._id
+          ? request.providerId._id.toString()
+          : request.providerId.toString()
+        : null;
+
+      const isUser = actorStr === requesterId;
+      const isProvider = actorStr === providerId;
+
+      // Initialize completion confirmation if not exists
+      if (!request.completionConfirmation) {
+        request.completionConfirmation = {
+          userConfirmed: false,
+          providerConfirmed: false,
+        };
+      }
+
+      // Mark confirmation from the actor
+      if (isUser) {
+        request.completionConfirmation.userConfirmed = true;
+        request.completionConfirmation.userConfirmedAt = new Date();
+        
+        // Extract rating and feedback from note if provided
+        if (metadata.rating) {
+          request.rating = metadata.rating;
+        }
+        if (metadata.feedback) {
+          request.feedback = metadata.feedback;
+        }
+      } else if (isProvider) {
+        request.completionConfirmation.providerConfirmed = true;
+        request.completionConfirmation.providerConfirmedAt = new Date();
+      }
+
+      // Only mark as COMPLETED if both parties have confirmed
+      const bothConfirmed = 
+        request.completionConfirmation.userConfirmed && 
+        request.completionConfirmation.providerConfirmed;
+
+      if (!bothConfirmed) {
+        // Save the confirmation but don't change status yet
+        await request.save();
+        return request;
+      }
+    }
 
     return requestRepository.updateStatus(requestId, newStatus, actorId, note);
   }
@@ -128,11 +181,8 @@ class RequestService {
     if (role === 'USER') {
       return requestRepository.findByRequesterId(userId, status);
     }
-    if (role === 'PROVIDER') {
-      return requestRepository.findByProviderId(userId, status);
-    }
-    // Admin can see all
-    return requestRepository.findAll(status ? { status } : {});
+    // PROVIDER
+    return requestRepository.findByProviderId(userId, status);
   }
 
   /**
@@ -178,9 +228,8 @@ class RequestService {
 
   /**
    * Validate that the actor has permission for a state transition.
-   * - USER can: CANCEL
+   * - USER can: CANCEL, COMPLETE
    * - PROVIDER can: ACCEPT, REJECT, COMPLETE
-   * - ADMIN can: any transition
    */
   _validateActor(request, newStatus, actorId) {
     const actorStr = actorId.toString();
@@ -193,9 +242,9 @@ class RequestService {
         : request.providerId.toString()
       : null;
 
-    // Requester can only cancel
-    if (actorStr === requesterId && newStatus !== 'CANCELLED') {
-      throw new AppError('Users can only cancel their requests', 403);
+    // Requester can cancel or complete
+    if (actorStr === requesterId && !['CANCELLED', 'COMPLETED'].includes(newStatus)) {
+      throw new AppError('Users can only cancel or complete their requests', 403);
     }
 
     // Provider must be assigned or it must be an accept

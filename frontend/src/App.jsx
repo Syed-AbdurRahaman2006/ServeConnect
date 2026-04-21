@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
+import useRequestStore from './store/requestStore';
+import { socketService } from './services/socket';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
@@ -11,25 +13,43 @@ import ServiceDetailsPage from './pages/ServiceDetailsPage';
 import ChatPage from './pages/ChatPage';
 import UserDashboard from './pages/UserDashboard';
 import ProviderDashboard from './pages/ProviderDashboard';
-import AdminPanel from './pages/AdminPanel';
+import ProfilePage from './pages/ProfilePage';
 
 const App = () => {
   const { initSocket, isAuthenticated, user } = useAuthStore();
+  const { updateRequestInStore } = useRequestStore();
   const location = useLocation();
 
   // Hide Top Navbar for dashboard-driven layouts
-  const hideNavbar = location.pathname.startsWith('/provider') || location.pathname.startsWith('/admin');
+  const hideNavbar = location.pathname.startsWith('/provider');
 
   // Initialize WebSocket connection on app load if user is authenticated
   useEffect(() => {
     if (isAuthenticated) {
       initSocket();
+
+      const handleRequestAccepted = ({ request, message }) => {
+        toast.success(message || 'Your request has been accepted!', { icon: '🎉' });
+        updateRequestInStore(request);
+      };
+
+      const handleRequestUpdated = ({ request, message }) => {
+        toast(message || 'Request status updated!', { icon: 'ℹ️' });
+        updateRequestInStore(request);
+      };
+
+      socketService.on('request:accepted', handleRequestAccepted);
+      socketService.on('request:updated', handleRequestUpdated);
+
+      return () => {
+        socketService.off('request:accepted', handleRequestAccepted);
+        socketService.off('request:updated', handleRequestUpdated);
+      };
     }
   }, [isAuthenticated]);
 
   // Helper to get the dashboard path for the current user
   const getDashboardPath = () => {
-    if (user?.role === 'ADMIN') return '/admin';
     if (user?.role === 'PROVIDER') return '/provider/dashboard';
     return '/dashboard';
   };
@@ -64,6 +84,14 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute roles={['USER']}>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Provider Routes */}
         <Route
@@ -92,17 +120,6 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-
-        {/* Admin Routes */}
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute roles={['ADMIN']}>
-              <AdminPanel />
-            </ProtectedRoute>
-          }
-        />
-
         {/* 404 */}
         <Route
           path="*"

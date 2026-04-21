@@ -16,6 +16,8 @@ const getConversation = asyncHandler(async (req, res) => {
     request.providerId._id || request.providerId,
   ];
 
+  
+
   const conversation = await chatService.getOrCreateConversation(
     requestId,
     participants

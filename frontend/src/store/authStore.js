@@ -58,6 +58,21 @@ const useAuthStore = create((set, get) => ({
     set({ user });
   },
 
+  updateProfile: async (profileData) => {
+    set({ loading: true, error: null });
+    try {
+      // TODO: Add API endpoint for profile update
+      // For now, just update locally
+      const updatedUser = { ...get().user, ...profileData };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      set({ user: updatedUser, loading: false });
+      return { success: true };
+    } catch (err) {
+      set({ error: err.message, loading: false });
+      throw err;
+    }
+  },
+
   updateLocation: async (coordinates) => {
     try {
       const res = await authAPI.updateLocation(coordinates);

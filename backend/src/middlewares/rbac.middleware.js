@@ -2,7 +2,7 @@
  * Role-Based Access Control (RBAC) Middleware
  * Restricts route access to specific roles.
  *
- * Usage: rbac('ADMIN', 'PROVIDER') — only ADMIN and PROVIDER can access
+ * Usage: rbac('PROVIDER') — only PROVIDER can access
  *
  * @param  {...string} roles - Allowed roles
  */

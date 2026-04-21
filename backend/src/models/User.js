@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 
 /**
  * User Model
- * Supports three roles: USER, PROVIDER, ADMIN
+ * Supports two roles: USER, PROVIDER
  * Location stored as GeoJSON for geo-spatial queries
  */
 const userSchema = new mongoose.Schema(
@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['USER', 'PROVIDER', 'ADMIN'],
+      enum: ['USER', 'PROVIDER'],
       default: 'USER',
     },
     status: {

@@ -13,8 +13,7 @@ const LoginPage = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      if (user?.role === 'ADMIN') navigate('/admin', { replace: true });
-      else if (user?.role === 'PROVIDER') navigate('/provider/dashboard', { replace: true });
+      if (user?.role === 'PROVIDER') navigate('/provider/dashboard', { replace: true });
       else navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -25,8 +24,7 @@ const LoginPage = () => {
       const res = await login(form);
       toast.success('Welcome back!');
       const role = res.data.user.role;
-      if (role === 'ADMIN') navigate('/admin');
-      else if (role === 'PROVIDER') navigate('/provider/dashboard');
+      if (role === 'PROVIDER') navigate('/provider/dashboard');
       else navigate('/dashboard');
     } catch (err) {
       toast.error(err.message || 'Login failed');

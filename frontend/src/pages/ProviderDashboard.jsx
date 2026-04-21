@@ -6,6 +6,7 @@ import useAuthStore from '../store/authStore';
 import LoadingSpinner from '../components/LoadingSpinner';
 import StatusBadge from '../components/StatusBadge';
 import LocationModal from '../components/LocationModal';
+import LocationFetchButton from '../components/LocationFetchButton';
 import { socketService } from '../services/socket';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,7 +15,7 @@ import {
   BarChart3, Wrench, ArrowRight, Eye, EyeOff, Trash2, 
   Menu, LogOut, Bell, Search, MapPin, LayoutDashboard, ClipboardList, User,
   TrendingUp, DollarSign, Clock, CheckCircle2, Zap, Star, ChevronRight,
-  Activity, Shield, Sparkles, ArrowUpRight, Package
+  Activity, Shield, Sparkles, ArrowUpRight, Package, ImageIcon, AlertCircle
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -31,10 +32,27 @@ const ProviderDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [greeting, setGreeting] = useState('');
+  const [detectedCity, setDetectedCity] = useState(() => {
+    try {
+      const saved = localStorage.getItem('userLocation');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.city) return parsed.city;
+      }
+      const name = localStorage.getItem('locationName');
+      if (name) return name;
+    } catch {}
+    return '';
+  });
   
   const [serviceForm, setServiceForm] = useState({
-    title: '', description: '', category: 'Cleaning', price: '', priceUnit: 'fixed',
+    title: '', description: '', category: 'Cleaning', price: '', priceUnit: 'fixed', imageUrl: '',
   });
+
+  // Completion confirmation modal
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [completingRequest, setCompletingRequest] = useState(false);
 
   useEffect(() => {
     fetchRequests();
@@ -76,12 +94,23 @@ const ProviderDashboard = () => {
     }
   };
 
-  const handleComplete = async (requestId) => {
+  const handleComplete = async (req) => {
+    setSelectedRequest(req);
+    setCompletionModalOpen(true);
+  };
+
+  const confirmCompletion = async () => {
+    setCompletingRequest(true);
     try {
-      await updateStatus(requestId, 'COMPLETED');
-      toast.success('Job completed!');
+      await updateStatus(selectedRequest._id, 'COMPLETED', 'Provider marked as complete. Awaiting user confirmation.');
+      toast.success('Job marked as completed! User will be notified.');
+      setCompletionModalOpen(false);
+      setSelectedRequest(null);
+      fetchRequests();
     } catch (err) {
-      toast.error(err.message || 'Failed to update');
+      toast.error(err.message || 'Failed to complete');
+    } finally {
+      setCompletingRequest(false);
     }
   };
 
@@ -91,7 +120,7 @@ const ProviderDashboard = () => {
       await createService({ ...serviceForm, price: Number(serviceForm.price) });
       toast.success('Service created!');
       setShowServiceForm(false);
-      setServiceForm({ title: '', description: '', category: 'Cleaning', price: '', priceUnit: 'fixed' });
+      setServiceForm({ title: '', description: '', category: 'Cleaning', price: '', priceUnit: 'fixed', imageUrl: '' });
     } catch (err) {
       toast.error(err.message || 'Failed to create service');
     }
@@ -131,6 +160,45 @@ const ProviderDashboard = () => {
             {user?.name || 'Provider'}
           </h1>
           <p className="text-surface-500 font-medium mt-1">Here's your business overview</p>
+          
+          {/* Location display — shows detected city or fetch button */}
+          <div className="mt-3">
+            {detectedCity ? (
+              <div className="flex items-center gap-3">
+                <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 text-violet-800 px-4 py-2.5 rounded-2xl">
+                  <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-sm">
+                    <MapPin size={15} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-violet-500 uppercase tracking-wider leading-none mb-0.5">Your Location</p>
+                    <p className="text-sm font-black text-violet-900 leading-tight">{detectedCity}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setLocationModalOpen(true)}
+                  className="text-xs font-bold text-violet-600 hover:text-violet-800 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <LocationFetchButton 
+                  variant="provider" 
+                  onLocationFetched={(loc) => {
+                    setDetectedCity(loc?.city || loc?.address || 'Location detected');
+                    fetchBroadcasted();
+                  }}
+                />
+                <button 
+                  onClick={() => setLocationModalOpen(true)}
+                  className="text-sm font-bold text-violet-600 hover:text-violet-800 transition-colors text-left ml-1"
+                >
+                  ✏️ Or enter location manually
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-2.5 rounded-2xl text-sm font-bold">
@@ -290,9 +358,23 @@ const ProviderDashboard = () => {
                     <button onClick={() => navigate(`/chat?requestId=${req._id}`)} className="bg-surface-100 text-surface-700 p-2 rounded-xl hover:bg-surface-200 transition" title="Chat">
                       <MessageSquare size={16} />
                     </button>
-                    <button onClick={() => handleComplete(req._id)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition shadow-sm flex items-center gap-1.5">
-                      <Check size={14} /> Done
-                    </button>
+                    {/* Check if completion is pending confirmation */}
+                    {req.completionConfirmation?.providerConfirmed && !req.completionConfirmation?.userConfirmed ? (
+                      <button 
+                        className="bg-amber-100 text-amber-700 border-2 border-amber-300 px-4 py-2 rounded-xl text-xs font-bold cursor-default flex items-center gap-1.5"
+                        disabled
+                      >
+                        <Clock size={14} className="animate-pulse" /> Awaiting User
+                      </button>
+                    ) : req.completionConfirmation?.userConfirmed && !req.completionConfirmation?.providerConfirmed ? (
+                      <button onClick={() => handleComplete(req)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition shadow-sm flex items-center gap-1.5 animate-pulse">
+                        <AlertCircle size={14} /> Confirm
+                      </button>
+                    ) : (
+                      <button onClick={() => handleComplete(req)} className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition shadow-sm flex items-center gap-1.5">
+                        <Check size={14} /> Done
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -451,9 +533,23 @@ const ProviderDashboard = () => {
                   <button onClick={() => navigate(`/chat?requestId=${req._id}`)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-surface-100 text-surface-700 px-5 py-2.5 rounded-xl font-bold hover:bg-surface-200 transition">
                     <MessageSquare size={18} /> Chat
                   </button>
-                  <button onClick={() => handleComplete(req._id)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-sm">
-                    <CheckCircle2 size={18} /> Complete
-                  </button>
+                  {/* Check if completion is pending confirmation */}
+                  {req.completionConfirmation?.providerConfirmed && !req.completionConfirmation?.userConfirmed ? (
+                    <button 
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-amber-100 text-amber-700 border-2 border-amber-300 px-6 py-2.5 rounded-xl font-bold cursor-default"
+                      disabled
+                    >
+                      <Clock size={18} className="animate-pulse" /> Awaiting User
+                    </button>
+                  ) : req.completionConfirmation?.userConfirmed && !req.completionConfirmation?.providerConfirmed ? (
+                    <button onClick={() => handleComplete(req)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-sm animate-pulse">
+                      <AlertCircle size={18} /> Confirm Complete
+                    </button>
+                  ) : (
+                    <button onClick={() => handleComplete(req)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-sm">
+                      <CheckCircle2 size={18} /> Complete
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -532,6 +628,35 @@ const ProviderDashboard = () => {
               <label className="block text-sm font-bold text-surface-700 mb-2">Description</label>
               <textarea className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition resize-none" rows={3} value={serviceForm.description} onChange={(e) => setServiceForm({...serviceForm, description: e.target.value})} placeholder="Describe what's included in this service..." required />
             </div>
+            
+            {/* Image URL Field */}
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-surface-700 mb-2 flex items-center gap-2">
+                <ImageIcon size={16} className="text-indigo-500" />
+                Service Image URL <span className="text-surface-400 font-medium text-xs">(optional)</span>
+              </label>
+              <input 
+                type="url" 
+                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" 
+                value={serviceForm.imageUrl} 
+                onChange={(e) => setServiceForm({...serviceForm, imageUrl: e.target.value})} 
+                placeholder="Paste image URL here (e.g. https://...)" 
+              />
+              {serviceForm.imageUrl && (
+                <div className="mt-3 relative rounded-xl overflow-hidden border border-surface-200 bg-surface-100">
+                  <img 
+                    src={serviceForm.imageUrl} 
+                    alt="Preview" 
+                    className="w-full h-40 object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                  <div className="hidden w-full h-40 items-center justify-center text-surface-400 text-sm font-medium">
+                    ⚠️ Could not load image. Check the URL.
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end">
               <button type="submit" className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-8 py-3 rounded-xl font-bold hover:from-indigo-700 hover:to-indigo-800 transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2">
                 <Sparkles size={16} /> Publish Service
@@ -554,53 +679,87 @@ const ProviderDashboard = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {myServices.map((svc, index) => (
             <motion.div 
               key={svc._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className={`bg-white border rounded-2xl overflow-hidden transition-all duration-300 group ${svc.availability ? 'border-surface-200 hover:border-indigo-300 hover:shadow-lg hover:-translate-y-0.5' : 'border-surface-200 opacity-60'}`}
+              className={`bg-white border rounded-3xl overflow-hidden transition-all duration-400 group ${svc.availability ? 'border-surface-200 hover:border-indigo-300 hover:shadow-2xl hover:shadow-indigo-100/40 hover:-translate-y-1' : 'border-surface-200 opacity-60'}`}
             >
-              {/* Color stripe */}
-              <div className={`h-1.5 w-full bg-gradient-to-r ${svc.availability ? 'from-indigo-500 to-purple-500' : 'from-surface-300 to-surface-400'}`}></div>
-              
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <span className="bg-surface-100 text-surface-600 text-xs font-bold px-2.5 py-1 rounded-lg mb-2 inline-block uppercase tracking-wider">{svc.category}</span>
-                    <h3 className="font-bold text-lg text-surface-900 line-clamp-1">{svc.title}</h3>
+              {/* ── Image Hero (~75% of card) ── */}
+              <div className="relative aspect-[4/3] overflow-hidden">
+                {svc.imageUrl ? (
+                  <img 
+                    src={svc.imageUrl} 
+                    alt={svc.title} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className={`w-full h-full bg-gradient-to-br ${svc.availability ? 'from-indigo-500 via-purple-500 to-pink-500' : 'from-surface-300 to-surface-400'} flex items-center justify-center`}>
+                    <div className="text-white/20">
+                      <Package size={64} />
+                    </div>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 ${svc.availability ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-surface-100 text-surface-500'}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${svc.availability ? 'bg-emerald-500' : 'bg-surface-400'}`}></div>
-                    {svc.availability ? 'Active' : 'Offline'}
+                )}
+                
+                {/* Cinematic gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                
+                {/* Top: Category + Status */}
+                <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
+                  <span className="bg-white/95 backdrop-blur-md text-surface-800 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest shadow-lg">
+                    {svc.category}
+                  </span>
+                  <span className={`text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 backdrop-blur-md shadow-lg ${
+                    svc.availability 
+                      ? 'bg-emerald-500/90 text-white' 
+                      : 'bg-surface-600/90 text-white'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${svc.availability ? 'bg-white animate-pulse' : 'bg-surface-400'}`}></div>
+                    {svc.availability ? 'Live' : 'Offline'}
                   </span>
                 </div>
-                
-                <p className="text-surface-500 text-sm mb-5 line-clamp-2 min-h-[40px] leading-relaxed">{svc.description}</p>
-                
-                <div className="flex items-center justify-between border-t border-surface-100 pt-4">
-                  <div>
-                    <span className="text-2xl font-black text-surface-900">₹{svc.price}</span>
-                    <span className="text-sm font-bold text-surface-400 ml-1">/ {svc.priceUnit.replace('_', ' ')}</span>
+
+                {/* Bottom overlay: Title + Price */}
+                <div className="absolute bottom-0 left-0 right-0 p-5">
+                  <h3 className="font-black text-xl text-white mb-1.5 line-clamp-1 drop-shadow-lg">{svc.title}</h3>
+                  <p className="text-white/70 text-sm line-clamp-1 mb-3 font-medium">{svc.description}</p>
+                  <div className="bg-white/15 backdrop-blur-md rounded-xl px-4 py-2.5 border border-white/10 inline-flex items-baseline gap-1">
+                    <span className="text-white font-black text-lg">₹{svc.price}</span>
+                    <span className="text-white/60 text-xs font-bold">/ {svc.priceUnit.replace('_', ' ')}</span>
                   </div>
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => toggleAvailability(svc._id)} 
-                      className={`p-2.5 rounded-xl transition-colors ${svc.availability ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'}`}
-                      title={svc.availability ? "Take Offline" : "Make Active"}
-                    >
-                      {svc.availability ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                    <button 
-                      onClick={() => deleteService(svc._id)} 
-                      className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 transition-colors"
-                      title="Delete Service"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                </div>
+              </div>
+
+              {/* ── Compact Action Bar (~25%) ── */}
+              <div className="px-5 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-sm shrink-0">
+                    {svc.title?.charAt(0) || 'S'}
                   </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-surface-900 truncate">{svc.title}</p>
+                    <p className="text-xs text-surface-400 font-medium">{new Date(svc.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button 
+                    onClick={() => toggleAvailability(svc._id)} 
+                    className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-105 ${svc.availability ? 'bg-amber-50 text-amber-600 hover:bg-amber-100 border border-amber-200' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'}`}
+                    title={svc.availability ? "Take Offline" : "Make Active"}
+                  >
+                    {svc.availability ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  <button 
+                    onClick={() => deleteService(svc._id)} 
+                    className="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 border border-red-200 transition-all duration-200 hover:scale-105"
+                    title="Delete Service"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -615,7 +774,11 @@ const ProviderDashboard = () => {
       <LocationModal 
         isOpen={locationModalOpen} 
         onClose={() => setLocationModalOpen(false)} 
-        onSave={() => fetchBroadcasted()}
+        onSave={(loc) => {
+          const city = loc?.name || loc?.city || localStorage.getItem('locationName') || 'Location set';
+          setDetectedCity(city);
+          fetchBroadcasted();
+        }}
       />
       
       {/* Mobile Sidebar Overlay */}
@@ -703,7 +866,7 @@ const ProviderDashboard = () => {
         <div className="p-4 border-t border-surface-100 space-y-2">
           <button 
             onClick={() => setLocationModalOpen(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-surface-600 hover:bg-surface-100 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-surface-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
           >
             <MapPin size={18} className="text-indigo-500" />
             <span>Update Location</span>
@@ -758,6 +921,81 @@ const ProviderDashboard = () => {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Completion Confirmation Modal */}
+      <AnimatePresence>
+        {completionModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => !completingRequest && setCompletionModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl"
+            >
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 size={32} className="text-emerald-600" />
+                </div>
+                <h3 className="text-2xl font-black text-surface-900 mb-2">Mark Job as Complete?</h3>
+                <p className="text-surface-600 font-medium">
+                  Confirm that you've successfully completed this service
+                </p>
+              </div>
+
+              <div className="bg-surface-50 border border-surface-200 rounded-2xl p-4 mb-6">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-xl flex items-center justify-center text-white font-bold">
+                    <Wrench size={20} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-surface-900 text-sm truncate">{selectedRequest?.serviceId?.title}</p>
+                    <p className="text-xs text-surface-500 font-medium">Client: {selectedRequest?.requesterId?.name}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-surface-600 leading-relaxed">
+                  The client will be notified and asked to confirm completion and provide a review.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCompletionModalOpen(false)}
+                  disabled={completingRequest}
+                  className="flex-1 px-6 py-3 bg-surface-100 text-surface-700 rounded-xl font-bold hover:bg-surface-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmCompletion}
+                  disabled={completingRequest}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-bold hover:from-emerald-700 hover:to-emerald-800 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {completingRequest ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Completing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      Yes, Complete
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <LocationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
     </div>
   );
 };

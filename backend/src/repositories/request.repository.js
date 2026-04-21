@@ -26,7 +26,8 @@ class RequestRepository {
     return Request.findById(id)
       .populate('serviceId', 'title category price description providerId')
       .populate('requesterId', 'name email avatar')
-      .populate('providerId', 'name email avatar');
+      .populate('providerId', 'name email avatar')
+      .select('+rating +feedback +completionConfirmation'); // Include rating, feedback, and completion confirmation
   }
 
   async findByRequesterId(requesterId, status) {
@@ -35,6 +36,7 @@ class RequestRepository {
     return Request.find(query)
       .populate('serviceId', 'title category price')
       .populate('providerId', 'name email avatar')
+      .select('+rating +feedback +completionConfirmation') // Include rating, feedback, and completion confirmation
       .sort({ createdAt: -1 });
   }
 
@@ -96,7 +98,8 @@ class RequestRepository {
    * Update request status with FSM validation and lifecycle recording.
    */
   async updateStatus(requestId, newStatus, actorId, note) {
-    const request = await Request.findById(requestId);
+    const request = await Request.findById(requestId)
+      .select('+rating +feedback +completionConfirmation');
     if (!request) return null;
 
     // Check FSM validity
@@ -144,7 +147,7 @@ class RequestRepository {
   }
 
   /**
-   * Get stats for admin dashboard
+   * Get request statistics by status
    */
   async getStats() {
     const stats = await Request.aggregate([

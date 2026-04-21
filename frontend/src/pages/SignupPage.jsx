@@ -15,8 +15,7 @@ const SignupPage = () => {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      if (user?.role === 'ADMIN') navigate('/admin', { replace: true });
-      else if (user?.role === 'PROVIDER') navigate('/provider/dashboard', { replace: true });
+      if (user?.role === 'PROVIDER') navigate('/provider/dashboard', { replace: true });
       else navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);

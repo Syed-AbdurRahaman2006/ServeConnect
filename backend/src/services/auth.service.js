@@ -16,7 +16,7 @@ class AuthService {
       throw new AppError('Email already registered', 409);
     }
 
-    // Only allow USER and PROVIDER roles via signup (ADMIN is seeded)
+    // Only allow USER and PROVIDER roles via signup
     const allowedRoles = ['USER', 'PROVIDER'];
     const userRole = allowedRoles.includes(role) ? role : 'USER';
 

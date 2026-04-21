@@ -69,6 +69,11 @@ const serviceSchema = new mongoose.Schema(
         default: [0, 0],
       },
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     tags: [{ type: String, trim: true }],
     rating: {
       type: Number,
