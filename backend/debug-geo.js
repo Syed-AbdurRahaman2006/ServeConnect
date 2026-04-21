@@ -14,7 +14,7 @@ require('dotenv').config();
 async function checkGeo() {
   try {
     // Connect to MongoDB using connection string
-    await mongoose.connect('mongodb+srv://syed:syed2006@cluster0.zevfoxt.mongodb.net/serve');
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/serveconnect');
 
     // Initialize output string
     let out = "Connected directly to MongoDB\n";

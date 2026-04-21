@@ -5,7 +5,7 @@ require('dotenv').config();
 
 async function checkGeo() {
   try {
-    await mongoose.connect('mongodb+srv://syed:syed2006@cluster0.zevfoxt.mongodb.net/serve');
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/serveconnect');
     let out = "Checking availability:\n";
     
     const allServices = await Service.find({});
