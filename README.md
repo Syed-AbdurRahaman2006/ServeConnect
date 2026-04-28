@@ -84,8 +84,3 @@ serveconnect/
 └── docker-compose.yml
 ```
 
-## Docker
-
-```bash
-docker-compose up --build
-```
